@@ -1,38 +1,41 @@
-clc
-clear all
-close all
+clc;
+clear all;
+close all;
 
-% Definición de las coordenadas del centro de la celda principal
-a = 0; % Coordenada x del centro
-b = 0; % Coordenada y del centro
-c = input("Ingresa el valor del lado del hexagono (km): "); % Valor del lado del hexágono
+% Parametros de entrada
+a = 0; % Coordenada x del centro celda central
+b = 0; % Coordenada y del centro celda central
+
+c = input("Medida del radio del hexagono (km): "); % Medida Radio del hexagono
 n_usuarios = input("Ingresa la cantidad de usuarios por celda: "); % Cantidad de usuarios por celda
 
 % Exponente de pérdidas por distancia
-alpha = 10; % Aquí se define el valor de α, ajusta este valor según sea necesario
+alpha = 10; % Aquí se define el valor de exponente de perdidas por distancia
+
+% Desviación estándar de pérdidas por ensombrecimiento (Variable aleatoria)
+desvia = 7;
 
 % Cálculo de apotema de los hexágonos
 apotema = (sqrt(3) * c) / 2;
 
 % Cálculo de potencia de los usuarios
 P_tx = 10 * log10(10 * 1000); % Potencia de transmisión en dBm
-G_tx = 12; % Ganancia de transmisión en dB
-G_rx = 2; % Ganancia de recepción en dB
+G_tx = 7; % Ganancia de transmisión en dB
+G_rx = 0; % Ganancia de recepción en dB
 
-% Desviación estándar de pérdidas por ensombrecimiento (Variable aleatoria)
-desvia = 7;
+% Inicializar la suma de potencias correctamente
+suma_para_Ptotal = P_tx + G_tx + G_rx;
+
 ad = makedist('Normal', 'mu', 0, 'sigma', desvia);
 
 % Dibujar hexágonos y usuarios
 [x, y, rx, ry] = DibujarHexagonos_y_usuarios(a, b, c, n_usuarios);
 
-% Suma de potencias para cálculo total
-suma_para_Ptotal = P_tx + G_tx + G_rx;
-
 % Variables para almacenar los datos de cada usuario
 Distancias = cell(1, 7);
 Omega = cell(1, 7);
 L_i_k = cell(1, 7);
+Potencias = cell(1, 7);
 
 % Cálculo de potencias de los usuarios en cada celda
 for i = 1:7
@@ -51,7 +54,7 @@ for i = 1:7
             Omega_i_k = random(ad);
             % Cálculo de la pérdida
             L_i_k{i}(j, z) = 10 * alpha * log10(d) + Omega_i_k;
-            % Cálculo de la potencia
+            % Cálculo de la potencia recibida restando las pérdidas
             Potencias{i}(j, z) = suma_para_Ptotal - L_i_k{i}(j, z);
             % Almacenar la distancia y la pérdida por ensombrecimiento
             Distancias{i}(j, z) = d;
@@ -88,29 +91,38 @@ for i = 1:length(indices_aleatorios)
     usuario_idx = indices_aleatorios(i);
     fprintf('Usuario %d\n', usuario_idx);
     fprintf('-------------------------\n');
-    fprintf('Estación Base\tDistancia (m)\tPérdida Ensombrecimiento (dB)\tPérdida Total (dB)\n');
+    fprintf('Estación Base\tDistancia (m)\tPérdida Ensombrecimiento (dB)\tPérdida Total (dB)\tPotencia Recibida (dBm)\n');
     for k = 1:7
-        if ~isempty(find(Usuarios_ordenados{k}(:, 1) == total_usuarios(usuario_idx, 1) & Usuarios_ordenados{k}(:, 2) == total_usuarios(usuario_idx, 2), 1))
-            fprintf('%d\t\t%.2f\t\t%.2f\t\t\t%.2f\n', k, Distancias{k}(usuario_idx), Omega{k}(usuario_idx), L_i_k{k}(usuario_idx));
-        end
+        fprintf('%d\t\t%.2f\t\t%.2f\t\t\t%.2f\t\t\t%.2f\n', k, Distancias{k}(indices_aleatorios(i)), Omega{k}(indices_aleatorios(i)), L_i_k{k}(indices_aleatorios(i)), Potencias{k}(indices_aleatorios(i)));
     end
     [~, base_asociada] = max(total_usuarios(usuario_idx, 3:end));
     fprintf('Base Asociada: %d (Color: %s)\n\n', base_asociada, nombre_colores{base_asociada});
 end
 
-% Gráfica de los hexágonos y usuarios
+
+% Gráfica con unicamente usuarios de la estación base central
 figure(1)
+%subplot(2, 1, 2)
+i = 1;
+plot(x(i, :), y(i, :), 'LineWidth', 2, 'Color', colores{i})
+grid on
+hold on
+plot(Usuarios_ordenados{1}(:, 1), Usuarios_ordenados{1}(:, 2), '*', 'Color', colores{1})
+title({'Usuarios solo de la estación base central alpha = 10'})
+
+% Grafica de La EB central y sus EB vecinas
+figure(2)
 for i = 7:-1:1
     plot(x(i, :), y(i, :), 'LineWidth', 2, 'Color', colores{i})
     grid on
     hold on
     plot(rx{i}(:), ry{i}(:), '.', 'Color', colores{i})
 end
-title('Usuarios de cada estación base considerando únicamente la distancia')
+title('Usuarios de cada estación base considerando únicamente la distancia');
 
 % Gráfica con usuarios dispersos
-figure(2)
-subplot(2, 1, 1)
+figure(3)
+%subplot(2, 1, 1)
 for i = 7:-1:1
     plot(x(i, :), y(i, :), 'LineWidth', 2, 'Color', colores{i})
     grid on
@@ -118,17 +130,18 @@ for i = 7:-1:1
     plot(Usuarios_ordenados{i}(:, 1), Usuarios_ordenados{i}(:, 2), '.', 'Color', colores{i})
 end
 plot(usuarios_resaltados(:, 1), usuarios_resaltados(:, 2), 'ro', 'MarkerSize', 10, 'LineWidth', 2)
-title({'Usuarios de cada estación base considerando la potencia recibida por el modelo lognormal'; 'Considerando \alpha = 10'})
+title({'Usuarios Dispersos considerando alpha = 10'})
 
-% Gráfica con usuarios de la estación base central
-subplot(2, 1, 2)
+% Gráfica con unicamente usuarios de la estación base central
+figure(4)
+%subplot(2, 1, 2)
 for i = 7:-1:1
     plot(x(i, :), y(i, :), 'LineWidth', 2, 'Color', colores{i})
     grid on
     hold on
 end
 plot(Usuarios_ordenados{1}(:, 1), Usuarios_ordenados{1}(:, 2), '.', 'Color', colores{1})
-title({'Usuarios de la estación base central considerando la potencia recibida por el modelo lognormal'; 'Considerando \alpha = 10'})
+title({'Usuarios solo de la estación base central alpha = 10'})
 
 function [vectores_x, vectores_y, randomx, randomy] = DibujarHexagonos_y_usuarios(a, b, c, n_usuarios)
     apotema = sqrt(3) * c / 2;
